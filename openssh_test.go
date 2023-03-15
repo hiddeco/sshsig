@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -164,6 +166,14 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 	var (
 		testNamespace = "file"
 		testMessage   = []byte("I never failed to convince an audience that the best thing they could do was to go away.")
+		sshVersion    = getSSHVersion(t)
+		// Only ssh-keygen 8.9 and later allow selection of hash at sshsig
+		// signing time. This is unfortunately not available in the version of
+		// OpenSSH that ships with macOS in GitHub Actions.
+		// xref: https://www.openssh.com/txt/release-8.9
+		supportsHashSelection = sshVersion >= 8.9
+		// Only ssh-keygen 8.1 and later support ECDSA and
+		supportECDSAPEM = sshVersion >= 8.2
 	)
 
 	tests := []struct {
@@ -180,6 +190,14 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 		for _, a := range sshsig.SupportedHashAlgorithms() {
 			algo := a
 			t.Run(fmt.Sprintf("%s-%s", tt.name, algo), func(t *testing.T) {
+				if !supportsHashSelection && algo == sshsig.HashSHA256 {
+					t.Skipf("skipping: ssh-keygen %v does not allow selection of hash at sshsig signing time", sshVersion)
+				}
+
+				if tt.name == "ecdsa" && !supportECDSAPEM {
+					t.Skipf("skipping: ssh-keygen %v does not support ECDSA PEM", sshVersion)
+				}
+
 				// Make test go brrrr...
 				t.Parallel()
 
@@ -190,14 +208,22 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 				// ssh-keygen will complain with "couldn't load".
 				keyFile := filepath.Join(tmp, "id")
 				assert.NoError(t, os.WriteFile(keyFile, []byte(tt.privateKey+"\n"), 0o600))
+				// Write the public key to a file as well. This is required
+				// because OpenSSH <8.3 does not support reading the public key
+				// from the private key file.
+				pubFile := filepath.Join(tmp, "id.pub")
+				assert.NoError(t, os.WriteFile(pubFile, []byte(tt.publicKey+"\n"), 0o600))
 
 				// Write the message to a file.
 				msgFile := filepath.Join(tmp, "message")
 				assert.NoError(t, os.WriteFile(msgFile, testMessage, 0o600))
 
 				// Sign the message.
-				_, err := execOpenSSH(t, tmp, nil, "-Y", "sign", "-n", testNamespace, "-f", keyFile,
-					"-O", "hashalg="+algo.String(), msgFile)
+				args := []string{"-Y", "sign", "-n", testNamespace, "-f", keyFile}
+				if supportsHashSelection {
+					args = append(args, "-O", "hashalg="+algo.String())
+				}
+				_, err := execOpenSSH(t, tmp, nil, append(args, msgFile)...)
 				assert.NoError(t, err)
 
 				// Read and unmarshal signature.
@@ -266,6 +292,26 @@ func execOpenSSH(t *testing.T, dir string, stdin io.Reader, args ...string) ([]b
 		return nil, fmt.Errorf("%w: %s", err, string(b))
 	}
 	return b, nil
+}
+
+func getSSHVersion(t *testing.T) float64 {
+	t.Helper()
+
+	out, err := exec.Command("ssh", "-V").CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to get SSH version: %s", out)
+	}
+
+	re := regexp.MustCompile(`OpenSSH.*?_(\d+\.\d+)(p\d+)?`)
+	matches := re.FindStringSubmatch(string(out))
+	if len(matches) < 2 {
+		t.Fatalf("failed to parse SSH version: %s", out)
+	}
+	v, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		t.Fatalf("failed to extract SSH version: %s", out)
+	}
+	return v
 }
 
 // oppositeAlgorithm returns the opposite hash algorithm.
