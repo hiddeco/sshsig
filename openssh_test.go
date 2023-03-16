@@ -242,6 +242,7 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 
 				// Different key.
 				otherPub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(otherPublicKey))
+				assert.NoError(t, err)
 				err = sshsig.Verify(bytes.NewReader(testMessage), sig, otherPub, sig.HashAlgorithm, testNamespace)
 				assert.ErrorIs(t, err, sshsig.ErrPublicKeyMismatch)
 
