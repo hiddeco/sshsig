@@ -7,6 +7,8 @@ on:
       - main
     paths-ignore:
       - README.md
+  schedule:
+    - cron: '55 5 * * 1-5'
 
 name: Test
 permissions:
