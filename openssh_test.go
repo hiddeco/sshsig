@@ -172,8 +172,6 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 		// OpenSSH that ships with macOS in GitHub Actions.
 		// xref: https://www.openssh.com/txt/release-8.9
 		supportsHashSelection = sshVersion >= 8.9
-		// Only ssh-keygen 8.1 and later support ECDSA and
-		supportECDSAPEM = sshVersion >= 8.2
 	)
 
 	tests := []struct {
@@ -192,10 +190,6 @@ func TestVerifyFromOpenSSH(t *testing.T) {
 			t.Run(fmt.Sprintf("%s-%s", tt.name, algo), func(t *testing.T) {
 				if !supportsHashSelection && algo == sshsig.HashSHA256 {
 					t.Skipf("skipping: ssh-keygen %v does not allow selection of hash at sshsig signing time", sshVersion)
-				}
-
-				if tt.name == "ecdsa" && !supportECDSAPEM {
-					t.Skipf("skipping: ssh-keygen %v does not support ECDSA PEM", sshVersion)
 				}
 
 				// Make test go brrrr...
