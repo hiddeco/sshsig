@@ -1,6 +1,7 @@
 package sshsig
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/crypto/ssh"
@@ -9,9 +10,9 @@ import (
 var (
 	// ErrUnsupportedSignatureVersion is returned when the signature version is
 	// not supported.
-	ErrUnsupportedSignatureVersion = fmt.Errorf("unsupported signature version")
+	ErrUnsupportedSignatureVersion = errors.New("unsupported signature version")
 	// ErrInvalidMagicPreamble is returned when the magic preamble is invalid.
-	ErrInvalidMagicPreamble = fmt.Errorf("invalid magic preamble")
+	ErrInvalidMagicPreamble = errors.New("invalid magic preamble")
 )
 
 // sigVersion is the supported version of the SSH signature format.
